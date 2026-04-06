@@ -49,10 +49,11 @@ const fastify = Fastify({
   http2: false,
 })
 
-// Serve static files (dashboard)
-fastify.register(require('@fastify/static'), {
-  root: path.join(__dirname, 'public'),
-})
+// Serve static files (dashboard) — optional, register only if public dir exists
+const publicDir = path.join(__dirname, 'public')
+if (fs.existsSync(publicDir)) {
+  fastify.register(require('@fastify/static'), { root: publicDir })
+}
 
 // Main SSE streaming endpoint
 fastify.post('/chat', async (request, reply) => {
