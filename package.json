@@ -1,11 +1,10 @@
 {
   "name": "openrouter-cluster",
   "version": "1.0.0",
-  "description": "OpenRouter API cluster with race-based deduplication. Dispatch requests to multiple API keys and return only the first response.",
+  "description": "OpenRouter API cluster with race-based deduplication. Dispatch requests to multiple API keys and return the first response.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "install": "npm install"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=18.0.0"
