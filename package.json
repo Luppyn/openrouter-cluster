@@ -1,0 +1,26 @@
+{
+  "name": "openrouter-cluster",
+  "version": "1.0.0",
+  "description": "OpenRouter API cluster with race-based deduplication. Dispatch requests to multiple API keys and return only the first response.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "install": "npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "openrouter",
+    "api-cluster",
+    "race",
+    "load-balancer",
+    "proxy"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "fastify": "^4.26.0",
+    "@fastify/static": "^7.0.0",
+    "dotenv": "^16.4.0"
+  }
+}
