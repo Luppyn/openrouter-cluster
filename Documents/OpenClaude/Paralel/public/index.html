@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenRouter Cluster Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', monospace; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 24px; margin-bottom: 20px; color: #58a6ff; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .stat-value { font-size: 28px; font-weight: bold; color: #58a6ff; }
+  .stat-label { font-size: 12px; color: #8b949e; margin-top: 4px; }
+
+  .chat-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .input-area { display: flex; flex-direction: column; gap: 8px; }
+  textarea { background: #161b22; color: #e6edf3; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 14px; min-height: 150px; resize: vertical; font-family: monospace; }
+  button { background: #238636; color: #fff; border: none; border-radius: 8px; padding: 12px 24px; font-size: 16px; cursor: pointer; font-weight: bold; }
+  button:hover { background: #2ea043; }
+  button:disabled { background: #30363d; cursor: not-allowed; }
+
+  .output { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; min-height: 300px; max-height: 500px; overflow-y: auto; white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+  .output .error { color: #f85149; }
+  .output .done { color: #3fb950; margin-top: 12px; border-top: 1px solid #30363d; padding-top: 8px; }
+
+  .keys-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .key-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .key-card.slow { border-color: #f85149; }
+  .key-name { font-weight: bold; color: #58a6ff; margin-bottom: 8px; }
+  .key-metric { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
+  .key-metric-label { color: #8b949e; }
+  .key-metric-value { color: #e6edf3; }
+
+  .tps-bar { height: 6px; background: #21262d; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .tps-bar-fill { height: 100%; background: #58a6ff; transition: width 0.5s; border-radius: 3px; }
+
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .status-dot.active { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+  .status-dot.idle { background: #484f58; }
+  .status-dot.slow { background: #f85149; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>OpenRouter Cluster Dashboard</h1>
+
+  <!-- Aggregate Stats -->
+  <div class="grid" id="stats"></div>
+
+  <!-- Chat -->
+  <div class="chat-section">
+    <div class="input-area">
+      <textarea id="prompt" placeholder="Digite sua mensagem..."></textarea>
+      <button id="sendBtn" onclick="sendChat()">Enviar (cluster paralelo)</button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <!-- Key Cards -->
+  <h2 style="margin-bottom: 12px; font-size: 18px;">Chaves API</h2>
+  <div class="keys-grid" id="keys"></div>
+</div>
+
+<script>
+function renderStats(data) {
+  const items = [
+    { value: data.totalTPS, label: 'TPS Total' },
+    { value: data.totalTokensProcessed, label: 'Tokens Processados' },
+    { value: data.totalRequests, label: 'Requisi\u00e7\u00f5es' },
+    { value: data.activeKeys + '/' + data.totalKeys, label: 'Chaves Ativas' },
+    { value: data.totalErrors, label: 'Erros' },
+    { value: data.totalRetries, label: 'Retries' },
+    { value: formatTime(data.uptime), label: 'Uptime' },
+  ]
+  document.getElementById('stats').innerHTML = items.map(i =>
+    `<div class="stat"><div class="stat-value">${i.value}</div><div class="stat-label">${i.label}</div></div>`
+  ).join('')
+}
+
+function renderKeys(data) {
+  document.getElementById('keys').innerHTML = Object.entries(data).map(([name, k]) => {
+    const status = k.isSlow ? 'slow' : (k.activeRequests > 0 ? 'active' : 'idle')
+    return `<div class="key-card ${k.isSlow ? 'slow' : ''}">
+      <div class="key-name"><span class="status-dot ${status}"></span>${name}</div>
+      <div class="key-metric"><span class="key-metric-label">Reqs ativas</span><span class="key-metric-value">${k.activeRequests}</span></div>
+      <div class="key-metric"><span class="key-metric-label">Tokens</span><span class="key-metric-value">${k.totalTokens}</span></div>
+      <div class="key-metric"><span class="key-metric-label">TTFT m\u00e9dio</span><span class="key-metric-value">${k.avgTTFT}ms</span></div>
+      <div class="key-metric"><span class="key-metric-label">\u00daltimo TTFT</span><span class="key-metric-value">${k.lastTTFT}ms</span></div>
+      <div class="key-metric"><span class="key-metric-label">Erros</span><span class="key-metric-value">${k.errors}</span></div>
+      <div class="key-metric"><span class="key-metric-label">Retries</span><span class="key-metric-value">${k.retries}</span></div>
+    </div>`
+  }).join('')
+}
+
+function formatTime(s) {
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = Math.floor(s % 60)
+  return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+}
+
+// Chat
+async function sendChat() {
+  const prompt = document.getElementById('prompt').value.trim()
+  if (!prompt) return
+
+  document.getElementById('sendBtn').disabled = true
+  const output = document.getElementById('output')
+  output.innerHTML = ''
+
+  let fullText = ''
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: prompt }]
+      })
+    })
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const json = JSON.parse(line.slice(6))
+          if (json.content) {
+            fullText += json.content
+            output.textContent = fullText
+            output.scrollTop = output.scrollHeight
+          }
+        } catch {}
+      }
+    }
+
+    output.innerHTML += '<div class="done">Request completed</div>'
+  } catch (e) {
+    output.innerHTML += `<div class="error">${e}</div>`
+  }
+
+  document.getElementById('sendBtn').disabled = false
+}
+
+// Update metrics every 2s
+async function refreshMetrics() {
+  try {
+    const res = await fetch('/metrics')
+    const data = await res.json()
+    renderStats(data.aggregate)
+    renderKeys(data.keys)
+  } catch {}
+}
+
+refreshMetrics()
+setInterval(refreshMetrics, 2000)
+</script>
+</body>
+</html>

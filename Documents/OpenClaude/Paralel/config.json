@@ -1,0 +1,15 @@
+{
+  "openrouter": {
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "model": "qwen/qwen3.6-plus:free",
+    "maxTokensPerRequest": 65536,
+    "requestTimeout": 300000
+  },
+  "cluster": {
+    "maxConcurrentPerKey": 3,
+    "retryOnRateLimit": true,
+    "retryDelay": 2000,
+    "maxRetries": 5,
+    "logLevel": "info"
+  }
+}
